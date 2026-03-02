@@ -30,8 +30,22 @@ export class E2BMachine extends Machine {
     this.metadata = config?.metadata ?? {};
   }
 
+  get id(): string | null {
+    return this.sandboxId;
+  }
+
   get state(): MachineState {
     return this._state;
+  }
+
+  static async connect(sandboxId: string, config?: E2BMachineConfig): Promise<E2BMachine> {
+    const machine = new E2BMachine(config);
+    machine.sandboxId = sandboxId;
+    machine.sandbox = await Sandbox.connect(sandboxId, {
+      apiKey: machine.apiKey,
+    });
+    machine._state = MachineState.RUNNING;
+    return machine;
   }
 
   async start(): Promise<void> {

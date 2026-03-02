@@ -9,6 +9,7 @@ export interface ExecuteOptions {
 }
 
 export abstract class Machine {
+  abstract get id(): string | null;
   abstract get state(): MachineState;
 
   abstract start(): Promise<void>;

@@ -53,12 +53,30 @@ export class GitMachine {
     this.onEventCb = config.onEvent;
   }
 
+  get id(): string | null {
+    return this.machine.id;
+  }
+
   get state(): MachineState {
     return this.machine.state;
   }
 
   get path(): string {
     return this.repoPath;
+  }
+
+  /**
+   * Reconnect to an already-running GitMachine by its machine ID.
+   * The sandbox must still be alive and the repo already cloned.
+   */
+  static async connect(
+    machine: Machine,
+    config: Omit<GitMachineConfig, "machine">
+  ): Promise<GitMachine> {
+    const gm = new GitMachine({ machine, ...config });
+    // Machine is already running and repo is already cloned — just wire up
+    gm.emit("reconnected", { id: machine.id });
+    return gm;
   }
 
   // --- Lifecycle ---
