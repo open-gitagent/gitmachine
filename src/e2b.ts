@@ -1,4 +1,4 @@
-import { Sandbox } from "e2b";
+import { Sandbox, CommandExitError } from "e2b";
 import type { CommandResult } from "e2b";
 import { Machine, type ExecuteOptions } from "./machine.js";
 import { MachineState, type ExecutionResult } from "./types.js";
@@ -103,19 +103,32 @@ export class E2BMachine extends Machine {
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
     const sandbox = this.requireSandbox();
-    const result = (await sandbox.commands.run(command, {
-      cwd: options?.cwd,
-      envs: options?.env,
-      timeoutMs: options?.timeout ? options.timeout * 1000 : undefined,
-      onStdout: options?.onStdout,
-      onStderr: options?.onStderr,
-    })) as CommandResult;
+    try {
+      const result = (await sandbox.commands.run(command, {
+        cwd: options?.cwd,
+        envs: options?.env,
+        timeoutMs: options?.timeout ? options.timeout * 1000 : undefined,
+        onStdout: options?.onStdout,
+        onStderr: options?.onStderr,
+      })) as CommandResult;
 
-    return {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    };
+      return {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
+    } catch (err) {
+      // E2B throws CommandExitError on non-zero exit codes.
+      // We return the result instead — callers decide what non-zero means.
+      if (err instanceof CommandExitError) {
+        return {
+          exitCode: err.exitCode,
+          stdout: err.stdout,
+          stderr: err.stderr,
+        };
+      }
+      throw err;
+    }
   }
 
   async readFile(path: string): Promise<string> {

@@ -1,6 +1,6 @@
 export { Machine, type ExecuteOptions } from "./machine.js";
 export { E2BMachine, type E2BMachineConfig } from "./e2b.js";
-export { GitMachine, type GitMachineConfig, type LifecycleHook } from "./git-machine.js";
+export { GitMachine, type GitMachineConfig, type GitIdentity, type LifecycleHook } from "./git-machine.js";
 export {
   MachineState,
   type ExecutionResult,

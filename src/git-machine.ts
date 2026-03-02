@@ -8,10 +8,17 @@ import {
 
 export type LifecycleHook = (gm: GitMachine) => Promise<void> | void;
 
+export interface GitIdentity {
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
+
 export interface GitMachineConfig {
   machine: Machine;
   repository: string;
   token: string;
+  identity?: GitIdentity;
   onStart?: LifecycleHook;
   onPause?: LifecycleHook;
   onResume?: LifecycleHook;
@@ -27,6 +34,7 @@ export class GitMachine {
   private readonly machine: Machine;
   private readonly repository: string;
   private readonly token: string;
+  private readonly identity: GitIdentity;
   private readonly onStartCb?: LifecycleHook;
   private readonly onPauseCb?: LifecycleHook;
   private readonly onResumeCb?: LifecycleHook;
@@ -43,6 +51,7 @@ export class GitMachine {
     this.machine = config.machine;
     this.repository = config.repository;
     this.token = config.token;
+    this.identity = config.identity ?? { name: "GitMachine", email: "gitagent@machine" };
     this.onStartCb = config.onStart;
     this.onPauseCb = config.onPause;
     this.onResumeCb = config.onResume;
@@ -85,10 +94,9 @@ export class GitMachine {
     await this.machine.start();
 
     // Clone with token embedded in URL (stays inside sandbox)
+    // Run from home dir since repoPath doesn't exist yet
     const authUrl = this.authUrl();
-    await this.exec(
-      `git clone ${authUrl} ${this.repoPath}`
-    );
+    await this.machine.execute(`git clone ${authUrl} ${this.repoPath}`);
 
     // Checkout session branch if specified
     if (this.session) {
@@ -98,8 +106,8 @@ export class GitMachine {
     }
 
     // Configure git identity for commits
-    await this.exec(`git config user.email "gitagent@machine"`);
-    await this.exec(`git config user.name "GitMachine"`);
+    await this.exec(`git config user.name "${this.identity.name}"`);
+    await this.exec(`git config user.email "${this.identity.email}"`);
 
     this.emit("started", {
       session: this.session,
@@ -141,7 +149,11 @@ export class GitMachine {
 
   async diff(): Promise<string> {
     return this.whileRunning(async () => {
-      const result = await this.exec("git diff HEAD");
+      // Stage everything first so untracked files show in the diff
+      await this.exec("git add -A");
+      const result = await this.exec("git diff --cached");
+      // Unstage so we don't affect working state
+      await this.exec("git reset HEAD --quiet");
       return result.stdout;
     });
   }
