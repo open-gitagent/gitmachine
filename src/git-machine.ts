@@ -3,33 +3,38 @@ import {
   MachineState,
   type ExecutionResult,
   type LogEntry,
-  type OnEvent,
   type RunOptions,
 } from "./types.js";
+
+export type LifecycleHook = (gm: GitMachine) => Promise<void> | void;
 
 export interface GitMachineConfig {
   machine: Machine;
   repository: string;
   token: string;
-  onStart?: (gm: GitMachine) => Promise<void>;
-  onEnd?: (gm: GitMachine) => Promise<void>;
+  onStart?: LifecycleHook;
+  onPause?: LifecycleHook;
+  onResume?: LifecycleHook;
+  onEnd?: LifecycleHook;
   env?: Record<string, string>;
   timeout?: number;
   session?: string;
   autoCommit?: boolean;
-  onEvent?: OnEvent;
+  onEvent?: (event: string, data: Record<string, unknown>, gm: GitMachine) => void | Promise<void>;
 }
 
 export class GitMachine {
   private readonly machine: Machine;
   private readonly repository: string;
   private readonly token: string;
-  private readonly onStartCb?: (gm: GitMachine) => Promise<void>;
-  private readonly onEndCb?: (gm: GitMachine) => Promise<void>;
+  private readonly onStartCb?: LifecycleHook;
+  private readonly onPauseCb?: LifecycleHook;
+  private readonly onResumeCb?: LifecycleHook;
+  private readonly onEndCb?: LifecycleHook;
   private env: Record<string, string>;
   private readonly session: string | null;
   private readonly autoCommit: boolean;
-  private readonly onEventCb?: OnEvent;
+  private readonly onEventCb?: (event: string, data: Record<string, unknown>, gm: GitMachine) => void | Promise<void>;
   private readonly repoPath = "/home/user/repo";
   private readonly _logs: LogEntry[] = [];
   private skipAutoCommit = false;
@@ -39,6 +44,8 @@ export class GitMachine {
     this.repository = config.repository;
     this.token = config.token;
     this.onStartCb = config.onStart;
+    this.onPauseCb = config.onPause;
+    this.onResumeCb = config.onResume;
     this.onEndCb = config.onEnd;
     this.env = { ...config.env };
     this.session = config.session ?? null;
@@ -89,12 +96,14 @@ export class GitMachine {
       await this.autoCommitChanges();
     }
 
+    await this.onPauseCb?.(this);
     await this.machine.pause();
     this.emit("paused", {});
   }
 
   async resume(): Promise<void> {
     await this.machine.resume();
+    await this.onResumeCb?.(this);
     this.emit("resumed", {});
   }
 
@@ -166,12 +175,12 @@ export class GitMachine {
 
   async update(opts: {
     env?: Record<string, string>;
-    onUpdate?: () => Promise<void>;
+    onUpdate?: (gm: GitMachine) => Promise<void> | void;
   }): Promise<void> {
     if (opts.env) {
       this.env = { ...this.env, ...opts.env };
     }
-    await opts.onUpdate?.();
+    await opts.onUpdate?.(this);
   }
 
   async run(command: string, options?: RunOptions): Promise<ExecutionResult> {
@@ -253,7 +262,7 @@ export class GitMachine {
 
   private emit(event: string, data: Record<string, unknown>): void {
     try {
-      this.onEventCb?.(event, data);
+      this.onEventCb?.(event, data, this);
     } catch {
       // Event callbacks should never crash the machine
     }
